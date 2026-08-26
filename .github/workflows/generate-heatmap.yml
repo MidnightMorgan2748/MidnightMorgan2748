@@ -35,6 +35,14 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git checkout main
           git add github-jet.svg dist/github-jet.svg
           git commit -m "Update animated contribution heatmap [skip ci]" || echo "No changes to commit"
-          git push origin main
+          git push origin main > push.log 2>&1
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: push-log
+          path: push.log
