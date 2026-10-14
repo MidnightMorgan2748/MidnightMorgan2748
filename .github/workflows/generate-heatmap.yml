@@ -21,7 +21,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          token: ${{ secrets.GH_TOKEN }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -37,10 +38,17 @@ jobs:
           GH_USERNAME: MidnightMorgan2748
         run: node generate.mjs
 
-      - name: Commit and push if changed
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update live jet heatmap SVG [skip ci]"
-          file_pattern: "dist/github-jet.svg github-jet.svg"
+      - name: Commit and push changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add github-jet.svg dist/github-jet.svg
+            git commit -m "chore: update live jet heatmap SVG [skip ci]"
+            git push origin main
+          else
+            echo "No changes detected. Working tree clean."
+          fi
+
 
 
