@@ -7,9 +7,10 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - 'github-jet.svg'
-      - 'dist/**'
+    paths:
+      - 'generate.mjs'
+      - '.github/workflows/generate-heatmap.yml'
+
 
 jobs:
   generate:
