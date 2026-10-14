@@ -183,6 +183,25 @@ export function computeStats(data) {
   return { total, activeDays, maxDay };
 }
 
+export function computeStreak(cells) {
+  if (!Array.isArray(cells) || cells.length === 0) return 0;
+  const validCells = cells.filter(c => c && c.date);
+  if (validCells.length === 0) return 0;
+
+  const sorted = validCells.slice().sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+  let streak = 0;
+  const lastIndex = sorted.length - 1;
+  for (let i = lastIndex; i >= 0; i--) {
+    if (sorted[i].count > 0) {
+      streak++;
+    } else {
+      if (i === lastIndex) continue;
+      break;
+    }
+  }
+  return streak;
+}
+
 export function buildCells(weeks, colCount = COLS) {
   const safeWeeks = Array.isArray(weeks) ? weeks.filter(w => w && Array.isArray(w.contributionDays)) : [];
   const recent = safeWeeks.slice(-colCount);
@@ -646,7 +665,7 @@ export function buildArcadeStarfighter(targets = []) {
 }
 
 export function buildSvg(weeks, options = {}) {
-  const { mock = false, username = USERNAME, cols = 52 } = options;
+  const { mock = false, username = USERNAME, cols = 52, rank = "LVL 24 · ML ENGINEER" } = options;
   if (mock || !weeks || weeks.length === 0) {
     weeks = generateMockWeeks(cols);
   }
@@ -655,6 +674,7 @@ export function buildSvg(weeks, options = {}) {
   const targets = selectTargets(cells);
   const stats = computeStats(cells);
   const scoreText = computeArcadeScore(stats.total);
+  const streak = computeStreak(cells);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
 <defs>
@@ -711,10 +731,11 @@ export function buildSvg(weeks, options = {}) {
   <text x="24" y="32"><tspan class="hud-label-gold">SCORE: </tspan><tspan class="hud-val-gold">${scoreText}</tspan></text>
 
   <!-- RANK / LEVEL -->
-  <text x="320" y="32"><tspan class="hud-label-cyan">RANK: </tspan><tspan class="hud-val-cyan">LVL 42 · AIML ARCHITECT</tspan></text>
+  <text x="320" y="32"><tspan class="hud-label-cyan">RANK: </tspan><tspan class="hud-val-cyan">${sanitizeText(rank)}</tspan></text>
 
   <!-- COMBO MULTIPLIER -->
-  <text x="680" y="32"><tspan class="hud-label-rose">COMBO: </tspan><tspan class="hud-val-rose">x14 SHIPPER</tspan></text>
+  <text x="680" y="32"><tspan class="hud-label-rose">COMBO: </tspan><tspan class="hud-val-rose">x${streak} STREAK</tspan></text>
+
 
   <!-- SHIELDS -->
   <text x="930" y="32" class="hud-label-cyan">SHIELDS: 100%</text>
@@ -784,6 +805,61 @@ export async function fetchWeeks(username = USERNAME, token = TOKEN) {
   return json.data.user.contributionsCollection.contributionCalendar.weeks;
 }
 
+export async function fetchPublicWeeks(username = USERNAME) {
+  if (!validateUsername(username)) {
+    throw new Error("Invalid username format");
+  }
+  const url = `https://github.com/users/${encodeURIComponent(username)}/contributions`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch public contributions: HTTP ${res.status}`);
+  }
+  const html = await res.text();
+  const tooltips = new Map();
+  const ttRegex = /<tool-tip[^>]+for="([^"]+)"[^>]*>([\s\S]*?)<\/tool-tip>/g;
+  let match;
+  while ((match = ttRegex.exec(html)) !== null) {
+    tooltips.set(match[1], match[2].trim());
+  }
+
+  const dayRegex = /<td[^>]+data-date="(\d{4}-\d{2}-\d{2})"[^>]+id="([^"]+)"[^>]+data-level="(\d+)"/g;
+  const days = [];
+  while ((match = dayRegex.exec(html)) !== null) {
+    const date = match[1];
+    const id = match[2];
+    const level = parseInt(match[3], 10);
+    const tip = tooltips.get(id) || "";
+    const countMatch = tip.match(/^(\d+)\s+contribution/);
+    const count = countMatch ? parseInt(countMatch[1], 10) : 0;
+    days.push({
+      date,
+      contributionCount: count,
+      color: THEME.palette[Math.min(level, 4)]
+    });
+  }
+
+  if (days.length === 0) {
+    throw new Error("No contribution days parsed from public endpoint");
+  }
+
+  days.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+
+  const weeks = [];
+  for (let i = 0; i < days.length; i += ROWS) {
+    const contributionDays = days.slice(i, i + ROWS);
+    while (contributionDays.length < ROWS) {
+      contributionDays.push({
+        date: null,
+        contributionCount: 0,
+        color: THEME.palette[0]
+      });
+    }
+    weeks.push({ contributionDays });
+  }
+  return weeks;
+}
+
+
 export async function main() {
   console.log("Initializing Retro Arcade Space Defender Heatmap Engine...");
 
@@ -792,19 +868,26 @@ export async function main() {
 
   if (TOKEN && USERNAME) {
     try {
-      console.log(`Querying live GitHub contributions for @${USERNAME}...`);
+      console.log(`Querying live GitHub contributions via GraphQL for @${USERNAME}...`);
       weeks = await fetchWeeks(USERNAME, TOKEN);
-      console.log(`Successfully retrieved ${weeks.length} weeks of live activity.`);
+      console.log(`Successfully retrieved ${weeks.length} weeks of live activity via GraphQL.`);
     } catch (err) {
-      console.warn(`Live fetch failed (${err.message}). Falling back to deterministic arcade telemetry.`);
-      isMock = true;
+      console.warn(`GraphQL live fetch failed (${err.message}). Attempting public calendar fallback...`);
     }
-  } else {
-    console.log("No GH_TOKEN detected in environment. Generating deterministic arcade preview.");
-    isMock = true;
   }
 
-  const svg = buildSvg(weeks, { mock: isMock, username: USERNAME });
+  if (!weeks || weeks.length === 0) {
+    try {
+      console.log(`Querying public GitHub contributions calendar for @${USERNAME}...`);
+      weeks = await fetchPublicWeeks(USERNAME);
+      console.log(`Successfully retrieved ${weeks.length} weeks of live public activity.`);
+    } catch (err) {
+      console.warn(`Public calendar fetch failed (${err.message}). Falling back to deterministic arcade telemetry.`);
+      isMock = true;
+    }
+  }
+
+  const svg = buildSvg(weeks, { mock: isMock, username: USERNAME, rank: "LVL 24 · ML ENGINEER" });
   const outPath = path.resolve(OUTPUT);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, svg, "utf8");
@@ -816,13 +899,6 @@ export async function main() {
     fs.writeFileSync(rootSvg, svg, "utf8");
     console.log(`Synced to ${rootSvg}`);
   }
-
-  // Also write to dist/clone/MidnightMorgan2748/github-jet.svg if path exists
-  const cloneOut = path.resolve("dist/clone/MidnightMorgan2748/github-jet.svg");
-  if (fs.existsSync(path.dirname(cloneOut))) {
-    fs.writeFileSync(cloneOut, svg, "utf8");
-    console.log(`Synced to ${cloneOut}`);
-  }
 }
 
 // Only auto-execute main() if invoked directly from CLI
@@ -832,3 +908,4 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(im
     process.exit(1);
   });
 }
+

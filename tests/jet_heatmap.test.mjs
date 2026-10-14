@@ -7,6 +7,7 @@ import {
   generateMockWeeks,
   computeStats,
   computeArcadeScore,
+  computeStreak,
   buildShieldBar,
   selectTargets,
   columnToTimeFraction,
@@ -49,6 +50,20 @@ describe('TDD: Precision Closed-Form Spline Kinematics & Synchronized Combat', (
       const statsFromCells = computeStats(cells);
       assert.strictEqual(statsFromCells.total, statsFromWeeks.total);
       assert.strictEqual(statsFromCells.activeDays, statsFromWeeks.activeDays);
+    });
+
+    it('should correctly calculate current streak from contribution cells', () => {
+      const cells = [
+        { count: 1, date: '2026-10-01' },
+        { count: 2, date: '2026-10-02' },
+        { count: 0, date: '2026-10-03' },
+        { count: 1, date: '2026-10-04' },
+        { count: 3, date: '2026-10-05' }
+      ];
+      assert.strictEqual(computeStreak(cells), 2);
+
+      const empty = [];
+      assert.strictEqual(computeStreak(empty), 0);
     });
 
     it('should generate 10 segmented glowing shield health blocks', () => {
@@ -224,9 +239,9 @@ describe('TDD: Precision Closed-Form Spline Kinematics & Synchronized Combat', (
       assert.ok(svg.endsWith('</svg>'));
       assert.ok(svg.includes('viewBox="0 0 1180 340"'));
       assert.ok(svg.includes('SCORE:'));
-      assert.ok(svg.includes('LVL 42 · AIML ARCHITECT'));
+      assert.ok(svg.includes('LVL 24 · ML ENGINEER'));
       assert.ok(svg.includes('COMBO:'));
-      assert.ok(svg.includes('x14 SHIPPER'));
+      assert.ok(svg.includes('STREAK'));
       assert.ok(svg.includes('SHIELDS: 100%'));
       assert.ok(svg.includes('id="boresight-reticle"'));
       assert.ok(svg.includes('id="target-lock-brackets"'));

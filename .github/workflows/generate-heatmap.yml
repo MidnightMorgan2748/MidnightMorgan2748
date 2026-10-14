@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'github-jet.svg'
+      - 'dist/**'
 
 jobs:
   generate:
@@ -23,9 +26,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Generate SVG
+      - name: Run Test Suite
+        run: npm test
+
+      - name: Generate Live SVG
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_USERNAME: MidnightMorgan2748
@@ -33,8 +39,9 @@ jobs:
 
       - name: Commit and Push Changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           git add github-jet.svg dist/github-jet.svg
-          git commit -m "Update animated contribution heatmap [skip ci]" || echo "No changes to commit"
+          git commit -m "chore: update animated contribution heatmap [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
+
