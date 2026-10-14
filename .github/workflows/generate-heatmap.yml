@@ -54,14 +54,13 @@ jobs:
             git config --local user.name "github-actions[bot]"
             git add github-jet.svg dist/github-jet.svg
             git commit -m "chore: update live jet heatmap SVG [skip ci]"
-            if [ -n "$GH_TOKEN" ]; then
-              git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main
-            else
-              git push origin HEAD:main
-            fi
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:main > push.log 2>&1 || \
+            git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:main >> push.log 2>&1 || \
+            (echo "=== GIT PUSH ERROR LOG ===" && cat push.log && exit 1)
           else
             echo "No changes detected. Working tree clean."
           fi
+
 
 
 
