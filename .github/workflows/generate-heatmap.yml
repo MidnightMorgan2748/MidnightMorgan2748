@@ -45,10 +45,11 @@ jobs:
             git config --local user.name "github-actions[bot]"
             git add github-jet.svg dist/github-jet.svg
             git commit -m "chore: update live jet heatmap SVG [skip ci]"
-            git push origin main
+            git push "https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git" HEAD:main
           else
             echo "No changes detected. Working tree clean."
           fi
+
 
 
 
